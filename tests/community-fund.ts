@@ -98,7 +98,7 @@ describe("community-fund", () => {
 
       expect.fail("Expected transaction to fail but it succeeded");
     } catch (error) {
-      console.log("Error caught:", error.message);
+      // Verify the error is a ConstraintSeeds violation
       expect(error.message).to.include("ConstraintSeeds");
     }
 
