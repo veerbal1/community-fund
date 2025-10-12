@@ -43,9 +43,14 @@ pub mod community_fund {
         Ok(())
     }
 
-    pub fn create_proposal(ctx: Context<CreateProposal>, title: String, description: String, amount_requested: u64) -> Result<()> {
+    pub fn create_proposal(
+        ctx: Context<CreateProposal>,
+        title: String,
+        description: String,
+        amount_requested: u64,
+    ) -> Result<()> {
         let proposal = &mut ctx.accounts.proposal;
-        proposal.id = ctx.accounts.user_profile.proposal_count + 1;
+        proposal.id = ctx.accounts.user_profile.proposal_count;
         proposal.owner = *ctx.accounts.user.key;
         proposal.title = title;
         proposal.description = description;
@@ -56,6 +61,13 @@ pub mod community_fund {
         proposal.created_at = Clock::get()?.unix_timestamp;
 
         ctx.accounts.user_profile.proposal_count += 1;
+        Ok(())
+    }
+
+    pub fn update_proposal(ctx: Context<UpdateProposal>, _proposal_id: u64, new_title: String, new_description: String) -> Result<()> {
+        let proposal = &mut ctx.accounts.proposal;
+        proposal.title = new_title;
+        proposal.description = new_description;
         Ok(())
     }
 }
@@ -76,11 +88,20 @@ pub struct CreateProposal<'info> {
     #[account(mut)]
     pub user_profile: Account<'info, UserProfile>,
 
-    #[account(init, seeds=[b"proposal", user.key().as_ref(), ((user_profile.proposal_count + 1).to_be_bytes().as_ref())], bump, payer = user, space = 8 + Proposal::INIT_SPACE)]
+    #[account(init, seeds=[b"proposal", user.key().as_ref(), ((user_profile.proposal_count).to_be_bytes().as_ref())], bump, payer = user, space = 8 + Proposal::INIT_SPACE)]
     pub proposal: Account<'info, Proposal>,
 
     #[account(mut)]
     pub user: Signer<'info>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(proposal_id: u64)]
+pub struct UpdateProposal<'info> {
+    pub owner: Signer<'info>,
+
+    #[account(mut, seeds = [b"proposal", owner.key().as_ref(), proposal_id.to_be_bytes().as_ref()], bump = proposal.bump, has_one = owner)]
+    pub proposal: Account<'info, Proposal>,
 }

@@ -1,8 +1,9 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { CommunityFund } from "../target/types/community_fund";
-import { PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { expect } from "chai";
+import { BN } from "bn.js";
 
 const generatePDA = (key: PublicKey, programId: PublicKey) => {
   return PublicKey.findProgramAddressSync(
@@ -11,9 +12,13 @@ const generatePDA = (key: PublicKey, programId: PublicKey) => {
   )[0];
 };
 
-const generateProposalPDA = (user: PublicKey, programId: PublicKey, count: number) => {
+const generateProposalPDA = (
+  user: PublicKey,
+  programId: PublicKey,
+  count: number
+) => {
   const countBuffer = Buffer.alloc(8);
-  countBuffer.writeBigUInt64BE(BigInt(count + 1));
+  countBuffer.writeBigUInt64BE(BigInt(count));
   return PublicKey.findProgramAddressSync(
     [Buffer.from("proposal"), user.toBuffer(), countBuffer],
     programId
@@ -29,6 +34,8 @@ describe("community-fund", () => {
   const program = anchor.workspace.communityFund as Program<CommunityFund>;
   const userProfilePDA = generatePDA(user, program.programId);
 
+  const bob = Keypair.generate();
+
   it("Initialize user", async () => {
     // Add your test here.
     const tx = await program.methods.initializeUser().rpc();
@@ -39,17 +46,20 @@ describe("community-fund", () => {
   });
 
   it("Create proposal", async () => {
-    const count = await program.account.userProfile.fetch(userProfilePDA).then(userProfile => userProfile.proposalCount.toNumber());
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
     const proposalPDA = generateProposalPDA(user, program.programId, count);
     const tx = await program.methods
       .createProposal(
         "Test Proposal",
         "Test Description",
         new anchor.BN(1000000000)
-      ).accounts({
+      )
+      .accounts({
         userProfile: userProfilePDA,
         user: user,
-        proposal: proposalPDA
+        proposal: proposalPDA,
       })
       .rpc();
 
@@ -59,5 +69,41 @@ describe("community-fund", () => {
     expect(proposal.description).to.equal("Test Description");
     expect(proposal.amountRequested.toNumber()).to.equal(1000000000);
     expect(proposal.voteCount.toNumber()).to.equal(0);
+  });
+
+  it("Update proposal", async () => {
+    const proposalPDA = generateProposalPDA(user, program.programId, 0);
+    const tx = await program.methods
+      .updateProposal(new BN(0), "New Title", "New Description")
+      .rpc();
+    console.log("Transaction signature", tx);
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.title).to.equal("New Title");
+    expect(proposal.description).to.equal("New Description");
+  });
+
+  it("Non owner cannot update proposal", async () => {
+    const proposalPDA = generateProposalPDA(user, program.programId, 0);
+
+    try {
+      await program.methods
+        .updateProposal(new BN(0), "Hacked Title", "Hacked Description")
+        .accounts({
+          owner: bob.publicKey,
+          proposal: proposalPDA,
+        })
+        .signers([bob])
+        .rpc();
+
+      expect.fail("Expected transaction to fail but it succeeded");
+    } catch (error) {
+      console.log("Error caught:", error.message);
+      expect(error.message).to.include("ConstraintSeeds");
+    }
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.title).to.equal("New Title");
+    expect(proposal.description).to.equal("New Description");
   });
 });
