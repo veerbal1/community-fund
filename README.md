@@ -340,5 +340,3 @@ MIT License - Feel free to use this code for learning purposes!
 ---
 
 **Day 8 Complete! 🎉**
-
-*"Implemented access control. Your notes, your rules! 🔐"*
