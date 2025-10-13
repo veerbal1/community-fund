@@ -32,9 +32,23 @@ pub struct UserProfile {
     pub bump: u8,
 }
 
+#[account]
+#[derive(InitSpace)]
+pub struct Config {
+    pub admin: Pubkey,
+    pub bump: u8,
+}
+
 #[program]
 pub mod community_fund {
     use super::*;
+
+    pub fn initialize_admin(ctx: Context<InitializeAdmin>) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        config.admin = ctx.accounts.user.key();
+        config.bump = ctx.bumps.config;
+        Ok(())
+    }
 
     pub fn initialize_user(ctx: Context<InitializeUser>) -> Result<()> {
         let user_profile = &mut ctx.accounts.user_profile;
@@ -64,7 +78,12 @@ pub mod community_fund {
         Ok(())
     }
 
-    pub fn update_proposal(ctx: Context<UpdateProposal>, _proposal_id: u64, new_title: String, new_description: String) -> Result<()> {
+    pub fn update_proposal(
+        ctx: Context<UpdateProposal>,
+        _proposal_id: u64,
+        new_title: String,
+        new_description: String,
+    ) -> Result<()> {
         let proposal = &mut ctx.accounts.proposal;
         proposal.title = new_title;
         proposal.description = new_description;
@@ -104,4 +123,15 @@ pub struct UpdateProposal<'info> {
 
     #[account(mut, seeds = [b"proposal", owner.key().as_ref(), proposal_id.to_be_bytes().as_ref()], bump = proposal.bump, has_one = owner)]
     pub proposal: Account<'info, Proposal>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeAdmin<'info> {
+    #[account(init, seeds=[b"config"], bump, payer = user, space = 8 + Config::INIT_SPACE)]
+    pub config: Account<'info, Config>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
