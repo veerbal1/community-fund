@@ -25,6 +25,13 @@ const generateProposalPDA = (
   )[0];
 };
 
+const generateConfigPDA = (programId: PublicKey) => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    programId
+  )[0];
+};
+
 describe("community-fund", () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
@@ -105,5 +112,76 @@ describe("community-fund", () => {
     const proposal = await program.account.proposal.fetch(proposalPDA);
     expect(proposal.title).to.equal("New Title");
     expect(proposal.description).to.equal("New Description");
+  });
+
+  it("Initialize admin", async () => {
+    const configPDA = generateConfigPDA(program.programId);
+    const tx = await program.methods.initializeAdmin().rpc();
+    console.log("Transaction signature", tx);
+
+    const config = await program.account.config.fetch(configPDA);
+    expect(config.admin.toString()).to.equal(user.toString());
+  });
+
+  it("Admin can reject proposal", async () => {
+    const proposalPDA = generateProposalPDA(user, program.programId, 0);
+    const configPDA = generateConfigPDA(program.programId);
+
+    const tx = await program.methods
+      .rejectProposal(new BN(0), user)
+      .accounts({
+        proposal: proposalPDA,
+        admin: user,
+        config: configPDA,
+      })
+      .rpc();
+
+    console.log("Transaction signature", tx);
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.status).to.deep.equal({ rejected: {} });
+  });
+
+  it("Non-admin cannot reject proposal", async () => {
+    // Create a new proposal first
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    
+    await program.methods
+      .createProposal(
+        "Another Proposal",
+        "Another Description",
+        new anchor.BN(2000000000)
+      )
+      .accounts({
+        userProfile: userProfilePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    const configPDA = generateConfigPDA(program.programId);
+
+    try {
+      await program.methods
+        .rejectProposal(new BN(count), user)
+        .accounts({
+          proposal: proposalPDA,
+          admin: bob.publicKey,
+          config: configPDA,
+        })
+        .signers([bob])
+        .rpc();
+
+      expect.fail("Expected transaction to fail but it succeeded");
+    } catch (error) {
+      // Verify the error is a ConstraintHasOne violation (admin check)
+      expect(error.message).to.include("Error");
+    }
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.status).to.deep.equal({ pending: {} });
   });
 });
