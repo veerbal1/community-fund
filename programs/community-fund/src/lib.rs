@@ -2,6 +2,11 @@ use anchor_lang::prelude::*;
 
 declare_id!("6gE2epaU3z6ySCsnwY9fvWyCCTnUMZ97c4jkzvPg52St");
 
+#[error_code]
+pub enum Error {
+    Unauthorized,
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct Proposal {
@@ -65,7 +70,7 @@ pub mod community_fund {
     ) -> Result<()> {
         let proposal = &mut ctx.accounts.proposal;
         proposal.id = ctx.accounts.user_profile.proposal_count;
-        proposal.owner = *ctx.accounts.user.key;
+        proposal.owner = ctx.accounts.user.key();
         proposal.title = title;
         proposal.description = description;
         proposal.amount_requested = amount_requested;
@@ -87,6 +92,13 @@ pub mod community_fund {
         let proposal = &mut ctx.accounts.proposal;
         proposal.title = new_title;
         proposal.description = new_description;
+        Ok(())
+    }
+
+    pub fn reject_proposal(ctx: Context<RejectProposal>, _proposal_id: u64, owner: Pubkey) -> Result<()> {
+        require!(owner == ctx.accounts.proposal.owner, Error::Unauthorized);
+        let proposal = &mut ctx.accounts.proposal;
+        proposal.status = ProposalStatus::Rejected;
         Ok(())
     }
 }
@@ -134,4 +146,17 @@ pub struct InitializeAdmin<'info> {
     pub user: Signer<'info>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(proposal_id: u64, owner: Pubkey)]
+pub struct RejectProposal<'info> {
+    #[account(mut, seeds = [b"proposal", owner.as_ref(), proposal_id.to_be_bytes().as_ref()], bump = proposal.bump)]
+    pub proposal: Account<'info, Proposal>,
+
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    #[account(seeds = [b"config"], bump = config.bump, has_one = admin)]
+    pub config: Account<'info, Config>,
 }
