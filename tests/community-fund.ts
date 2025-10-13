@@ -46,7 +46,6 @@ describe("community-fund", () => {
   it("Initialize user", async () => {
     // Add your test here.
     const tx = await program.methods.initializeUser().rpc();
-    console.log("Transaction signature", tx);
 
     const userProfile = await program.account.userProfile.fetch(userProfilePDA);
     expect(userProfile.proposalCount.toNumber()).to.equal(0);
@@ -70,7 +69,6 @@ describe("community-fund", () => {
       })
       .rpc();
 
-    console.log("Transaction signature", tx);
     const proposal = await program.account.proposal.fetch(proposalPDA);
     expect(proposal.title).to.equal("Test Proposal");
     expect(proposal.description).to.equal("Test Description");
@@ -83,7 +81,6 @@ describe("community-fund", () => {
     const tx = await program.methods
       .updateProposal(new BN(0), "New Title", "New Description")
       .rpc();
-    console.log("Transaction signature", tx);
 
     const proposal = await program.account.proposal.fetch(proposalPDA);
     expect(proposal.title).to.equal("New Title");
@@ -117,7 +114,6 @@ describe("community-fund", () => {
   it("Initialize admin", async () => {
     const configPDA = generateConfigPDA(program.programId);
     const tx = await program.methods.initializeAdmin().rpc();
-    console.log("Transaction signature", tx);
 
     const config = await program.account.config.fetch(configPDA);
     expect(config.admin.toString()).to.equal(user.toString());
@@ -135,8 +131,6 @@ describe("community-fund", () => {
         config: configPDA,
       })
       .rpc();
-
-    console.log("Transaction signature", tx);
 
     const proposal = await program.account.proposal.fetch(proposalPDA);
     expect(proposal.status).to.deep.equal({ rejected: {} });
