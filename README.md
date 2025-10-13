@@ -22,6 +22,25 @@ A decentralized community funding platform built on Solana using the Anchor fram
 
 ---
 
+### Day 9 (Completed): Admin Authority 👮
+
+**What I Built:**
+- Admin configuration system with global PDA
+- Admin initialization (first user becomes admin)
+- Reject proposal functionality (admin-only)
+- Authority hierarchy implementation (Admin > User)
+- Non-admin rejection prevention
+
+**What I Learned:**
+- Global state management with singleton PDAs
+- Multi-level access control (admin vs regular users)
+- Custom error codes with `#[error_code]`
+- Using `require!` macro for validation
+- Combining `has_one` constraint with manual checks
+- Testing admin-only operations
+
+---
+
 ## 🏗️ Project Structure
 
 ```
@@ -61,6 +80,13 @@ community-fund/
 - Owner verification for updates
 - Proper error handling
 
+### ✅ Admin System
+- Global admin configuration account
+- Initialize admin (first user)
+- Admin can reject any proposal
+- Authority hierarchy (Admin > User)
+- Custom error handling for unauthorized access
+
 ---
 
 ## 📝 Data Structures
@@ -94,6 +120,22 @@ pub enum ProposalStatus {
     Pending,
     Approved,
     Rejected,
+}
+```
+
+### Config
+```rust
+pub struct Config {
+    pub admin: Pubkey,  // Admin's public key
+    pub bump: u8,       // PDA bump seed
+}
+```
+
+### Custom Errors
+```rust
+#[error_code]
+pub enum Error {
+    Unauthorized,  // User not authorized for this action
 }
 ```
 
@@ -145,15 +187,21 @@ All tests passing ✅
 2. **Create Proposal** - Creates proposal with unique PDA and correct data
 3. **Update Proposal** - Owner successfully updates their proposal
 4. **Non-owner Cannot Update** - Unauthorized user blocked from updating (ConstraintSeeds error)
+5. **Initialize Admin** - Creates admin config with first user as admin
+6. **Admin Can Reject Proposal** - Admin successfully rejects a proposal
+7. **Non-admin Cannot Reject** - Regular user blocked from rejecting proposals
 
 ```bash
   community-fund
-    ✔ Initialize user (245ms)
-    ✔ Create proposal (460ms)
-    ✔ Update proposal (461ms)
+    ✔ Initialize user
+    ✔ Create proposal
+    ✔ Update proposal
     ✔ Non owner cannot update proposal
+    ✔ Initialize admin
+    ✔ Admin can reject proposal
+    ✔ Non-admin cannot reject proposal
 
-  4 passing (1s)
+  7 passing (2s)
 ```
 
 ---
@@ -223,6 +271,36 @@ try {
 }
 ```
 
+### 6. Global State with Singleton PDAs
+Creating a single config account for the entire program:
+
+```rust
+// Single PDA with no user-specific seeds
+#[account(init, seeds=[b"config"], bump, payer = user, space = 8 + Config::INIT_SPACE)]
+pub config: Account<'info, Config>,
+```
+
+### 7. Custom Errors and require! Macro
+```rust
+#[error_code]
+pub enum Error {
+    Unauthorized,
+}
+
+// Usage in function
+require!(owner == ctx.accounts.proposal.owner, Error::Unauthorized);
+```
+
+### 8. Admin Access Control Pattern
+```rust
+#[account(
+  seeds = [b"config"],
+  bump = config.bump,
+  has_one = admin  // Validates config.admin == admin.key()
+)]
+pub config: Account<'info, Config>,
+```
+
 ---
 
 ## 🔄 Program Instructions
@@ -261,14 +339,34 @@ Updates an existing proposal (owner only).
 - `owner` (signer) - Must be proposal creator
 - `proposal` (mut) - Proposal to update
 
+### `initialize_admin`
+Initializes the admin configuration (one-time setup).
+
+**Accounts:**
+- `config` (init) - Global config PDA
+- `user` (signer, mut) - First user becomes admin
+- `system_program` - System program
+
+### `reject_proposal`
+Allows admin to reject any proposal (admin-only).
+
+**Parameters:**
+- `proposal_id: u64` - ID of proposal to reject
+- `owner: Pubkey` - Owner of the proposal (for PDA derivation)
+
+**Accounts:**
+- `proposal` (mut) - Proposal to reject
+- `admin` (signer, mut) - Must be the admin
+- `config` - Config account (validates admin)
+
 ---
 
 ## 📅 Next Steps (Upcoming Days)
 
-### Day 9: Admin Authority 👮
-- [ ] Create admin account
-- [ ] Admin can reject any proposal
-- [ ] Implement authority hierarchy (Admin > User)
+### Day 9: Admin Authority 👮 ✅ COMPLETED
+- [x] Create admin account
+- [x] Admin can reject any proposal
+- [x] Implement authority hierarchy (Admin > User)
 
 ### Day 10: Multisig ✍️
 - [ ] Three admin accounts
@@ -336,7 +434,14 @@ MIT License - Feel free to use this code for learning purposes!
 3. **Test failure cases** - Security comes from testing what should NOT work
 4. **Byte encoding is critical** - TypeScript and Rust must match exactly
 5. **Constraints are your friend** - Use `seeds`, `bump`, `has_one` for validation
+6. **Singleton PDAs** - Global state with seeds like `[b"config"]` without user-specific data
+7. **Custom errors** - Define your own error codes for better debugging
+8. **require! macro** - Clean validation with custom error messages
+9. **Authority hierarchy** - Implement admin/moderator patterns with `has_one`
+10. **Multi-level access control** - Combine constraints with manual checks
 
 ---
 
-**Day 8 Complete! 🎉**
+**Days 8-9 Complete! 🎉**
+
+*"Built access control + admin authority. Your proposals, admin oversight! 🔐👮"*
