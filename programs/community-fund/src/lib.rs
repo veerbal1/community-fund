@@ -20,8 +20,8 @@ pub mod community_fund {
         instructions::admin::initialize_admin(ctx, admin2, admin3)
     }
 
-    pub fn transfer_admin(ctx: Context<TransferAdmin>, new_admin: Pubkey) -> Result<()> {
-        instructions::admin::transfer_admin(ctx, new_admin)
+    pub fn transfer_admin(ctx: Context<TransferAdmin>, old_admin: Pubkey, new_admin: Pubkey) -> Result<()> {
+        instructions::admin::transfer_admin(ctx, old_admin, new_admin)
     }
 
     pub fn initialize_user(ctx: Context<InitializeUser>) -> Result<()> {

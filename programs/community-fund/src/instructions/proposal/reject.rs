@@ -15,7 +15,7 @@ pub struct RejectProposal<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(seeds = [b"config"], bump = config.bump, has_one = admin)]
+    #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
 }
 
@@ -25,6 +25,14 @@ pub fn reject_proposal(
     owner: Pubkey,
 ) -> Result<()> {
     require!(owner == ctx.accounts.proposal.owner, ErrorCode::Unauthorized);
+    
+    // Verify admin is authorized
+    let admin = ctx.accounts.admin.key();
+    require!(
+        ctx.accounts.config.admins.contains(&admin),
+        ErrorCode::Unauthorized
+    );
+    
     let proposal = &mut ctx.accounts.proposal;
     proposal.status = ProposalStatus::Rejected;
     Ok(())

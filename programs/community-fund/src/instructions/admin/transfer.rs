@@ -19,19 +19,29 @@ pub struct TransferAdmin<'info> {
 
 pub fn transfer_admin(
     ctx: Context<TransferAdmin>,
-    new_admin: Pubkey
+    old_admin: Pubkey,
+    new_admin: Pubkey,
 ) -> Result<()> {
     let config = &mut ctx.accounts.config;
     
-    // Verify current admin is calling
+    // Verify current admin is calling and is in admins array
+    let current_admin = ctx.accounts.current_admin.key();
     require!(
-        ctx.accounts.current_admin.key() == config.admin,
+        config.admins.contains(&current_admin),
         ErrorCode::Unauthorized
     );
     
-    // Update admin
-    let old_admin = config.admin;
-    config.admin = new_admin;
+    // Find and replace the old admin with new admin in the array
+    let mut admin_replaced = false;
+    for i in 0..config.admins.len() {
+        if config.admins[i] == old_admin {
+            config.admins[i] = new_admin;
+            admin_replaced = true;
+            break;
+        }
+    }
+    
+    require!(admin_replaced, ErrorCode::Unauthorized);
     
     msg!("Admin transferred from {} to {}", old_admin, new_admin);
     
