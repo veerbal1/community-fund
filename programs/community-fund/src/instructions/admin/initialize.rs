@@ -26,7 +26,7 @@ pub struct InitializeAdmin<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn initialize_admin(ctx: Context<InitializeAdmin>) -> Result<()> {
+pub fn initialize_admin(ctx: Context<InitializeAdmin>, admin2: Pubkey, admin3: Pubkey) -> Result<()> {
     // Step 1: Derive expected program_data address from this executing program
     let program_id = ctx.program_id;
     let (expected_program_data, _bump) = Pubkey::find_program_address(
@@ -69,10 +69,12 @@ pub fn initialize_admin(ctx: Context<InitializeAdmin>) -> Result<()> {
     
     // Step 5: Set admin
     let config = &mut ctx.accounts.config;
-    config.admin = ctx.accounts.user.key();
+    config.admins[0] = ctx.accounts.user.key();
+    config.admins[1] = admin2;
+    config.admins[2] = admin3;
     config.bump = ctx.bumps.config;
     
-    msg!("Admin initialized: {}", config.admin);
+    msg!("Admin initialized: {}", config.admins.len());
     
     Ok(())
 }

@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 #[account]
 #[derive(InitSpace)]
 pub struct Config {
-    pub admin: Pubkey,
+    pub admins: [Pubkey; 3],
     pub bump: u8,
 }
 
@@ -21,6 +21,9 @@ pub struct Proposal {
     pub created_at: i64,
     pub vote_count: u64,
     pub bump: u8,
+
+    #[max_len(3)]
+    pub funding_approvals: Vec<Pubkey>
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, InitSpace)]

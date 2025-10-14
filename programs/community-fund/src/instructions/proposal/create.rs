@@ -42,6 +42,8 @@ pub fn create_proposal(
     proposal.bump = ctx.bumps.proposal;
     proposal.created_at = Clock::get()?.unix_timestamp;
 
+    proposal.funding_approvals = Vec::new();
+
     ctx.accounts.user_profile.proposal_count += 1;
     Ok(())
 }

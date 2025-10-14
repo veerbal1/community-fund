@@ -12,8 +12,12 @@ use instructions::*;
 pub mod community_fund {
     use super::*;
 
-    pub fn initialize_admin(ctx: Context<InitializeAdmin>) -> Result<()> {
-        instructions::admin::initialize_admin(ctx)
+    pub fn initialize_admin(
+        ctx: Context<InitializeAdmin>,
+        admin2: Pubkey,
+        admin3: Pubkey,
+    ) -> Result<()> {
+        instructions::admin::initialize_admin(ctx, admin2, admin3)
     }
 
     pub fn transfer_admin(ctx: Context<TransferAdmin>, new_admin: Pubkey) -> Result<()> {
@@ -48,5 +52,13 @@ pub mod community_fund {
         owner: Pubkey,
     ) -> Result<()> {
         instructions::proposal::reject_proposal(ctx, proposal_id, owner)
+    }
+
+    pub fn approve_funding(
+        ctx: Context<ApproveFunding>,
+        proposal_id: u64,
+        owner: Pubkey,
+    ) -> Result<()> {
+        instructions::proposal::approve_funding(ctx, proposal_id, owner)
     }
 }

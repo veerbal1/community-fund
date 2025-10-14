@@ -4,11 +4,13 @@ use anchor_lang::prelude::*;
 pub enum ErrorCode {
     #[msg("Only the program's upgrade authority can perform this action")]
     Unauthorized,
-    
+
     #[msg("Invalid program data account provided")]
     InvalidProgramData,
-    
+
     #[msg("Failed to extract upgrade authority from program data")]
     InvalidUpgradeAuthority,
-}
 
+    #[msg("This admin has already approved this proposal")]
+    AlreadyApproved,
+}
