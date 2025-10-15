@@ -43,6 +43,20 @@ const generateProgramDataPDA = (programId: PublicKey) => {
   )[0];
 };
 
+const generateVotePDA = (
+  voter: PublicKey,
+  owner: PublicKey,
+  programId: PublicKey,
+  proposalId: number
+) => {
+  const proposalIdBuffer = Buffer.alloc(8);
+  proposalIdBuffer.writeBigUInt64BE(BigInt(proposalId));
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("vote"), voter.toBuffer(), owner.toBuffer(), proposalIdBuffer],
+    programId
+  )[0];
+};
+
 describe("community-fund", () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
@@ -696,6 +710,88 @@ describe("community-fund", () => {
     }
   });
 
+  // ==================== VOTE TESTS ====================
+
+  it("User can vote on a proposal", async () => {
+    // Use proposal 4 (exists and not rejected/approved yet)
+    const proposalPDA = generateProposalPDA(user, program.programId, 4);
+    const votePDA = generateVotePDA(user, user, program.programId, 4);
+
+    // Get initial vote count
+    const proposalBefore = await program.account.proposal.fetch(proposalPDA);
+    const initialVoteCount = proposalBefore.voteCount.toNumber();
+
+    await program.methods
+      .voteOnProposal(new BN(4), user)
+      .accounts({
+        voteAccount: votePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    // Verify vote account was created
+    const voteAccount = await program.account.voteAccount.fetch(votePDA);
+    expect(voteAccount.timestamp.toNumber()).to.be.greaterThan(0);
+
+    // Verify vote count increased
+    const proposalAfter = await program.account.proposal.fetch(proposalPDA);
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
+    console.log(`✅ Vote recorded, count: ${initialVoteCount} -> ${proposalAfter.voteCount.toNumber()}`);
+  });
+
+  it("Cannot vote twice on same proposal", async () => {
+    const proposalPDA = generateProposalPDA(user, program.programId, 4);
+    const votePDA = generateVotePDA(user, user, program.programId, 4);
+
+    try {
+      await program.methods
+        .voteOnProposal(new BN(4), user)
+        .accounts({
+          voteAccount: votePDA,
+          user: user,
+          proposal: proposalPDA,
+        })
+        .rpc();
+      expect.fail("Expected transaction to fail but it succeeded");
+    } catch (error) {
+      expect(error.message).to.include("already in use");
+      console.log("✅ Correctly prevented duplicate vote");
+    }
+  });
+
+  it("Multiple users can vote on same proposal", async () => {
+    // Airdrop to Bob
+    const airdropSig = await provider.connection.requestAirdrop(
+      bob.publicKey,
+      2 * anchor.web3.LAMPORTS_PER_SOL
+    );
+    await provider.connection.confirmTransaction(airdropSig, "confirmed");
+
+    const proposalPDA = generateProposalPDA(user, program.programId, 4);
+    const bobVotePDA = generateVotePDA(bob.publicKey, user, program.programId, 4);
+
+    const proposalBefore = await program.account.proposal.fetch(proposalPDA);
+    const initialVoteCount = proposalBefore.voteCount.toNumber();
+
+    await program.methods
+      .voteOnProposal(new BN(4), user)
+      .accounts({
+        voteAccount: bobVotePDA,
+        user: bob.publicKey,
+        proposal: proposalPDA,
+      })
+      .signers([bob])
+      .rpc();
+
+    const bobVoteAccount = await program.account.voteAccount.fetch(bobVotePDA);
+    expect(bobVoteAccount.timestamp.toNumber()).to.be.greaterThan(0);
+
+    const proposalAfter = await program.account.proposal.fetch(proposalPDA);
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
+    console.log(`✅ Multiple users can vote, count: ${initialVoteCount} -> ${proposalAfter.voteCount.toNumber()}`);
+  });
+
   // ==================== MULTIPLE USERS TESTS ====================
 
   it("Multiple users can create proposals independently", async () => {
@@ -740,6 +836,108 @@ describe("community-fund", () => {
     console.log("✅ Multiple users can create proposals independently");
   });
 
+  it("Alice can vote on her own proposal", async () => {
+    // Alice's proposal 0 exists from earlier test
+    const aliceProposalPDA = generateProposalPDA(alice.publicKey, program.programId, 0);
+    const aliceVotePDA = generateVotePDA(alice.publicKey, alice.publicKey, program.programId, 0);
+
+    const proposalBefore = await program.account.proposal.fetch(aliceProposalPDA);
+    const initialVoteCount = proposalBefore.voteCount.toNumber();
+
+    await program.methods
+      .voteOnProposal(new BN(0), alice.publicKey)
+      .accounts({
+        voteAccount: aliceVotePDA,
+        user: alice.publicKey,
+        proposal: aliceProposalPDA,
+      })
+      .signers([alice])
+      .rpc();
+
+    const proposalAfter = await program.account.proposal.fetch(aliceProposalPDA);
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
+    console.log("✅ Owner can vote on their own proposal");
+  });
+
+  it("Users can vote on Alice's proposal", async () => {
+    const aliceProposalPDA = generateProposalPDA(alice.publicKey, program.programId, 0);
+    const userVotePDA = generateVotePDA(user, alice.publicKey, program.programId, 0);
+
+    const proposalBefore = await program.account.proposal.fetch(aliceProposalPDA);
+    const initialVoteCount = proposalBefore.voteCount.toNumber();
+
+    await program.methods
+      .voteOnProposal(new BN(0), alice.publicKey)
+      .accounts({
+        voteAccount: userVotePDA,
+        user: user,
+        proposal: aliceProposalPDA,
+      })
+      .rpc();
+
+    const proposalAfter = await program.account.proposal.fetch(aliceProposalPDA);
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
+    console.log("✅ Users can vote on other users' proposals");
+  });
+
+  it("Bob can also vote on Alice's proposal", async () => {
+    const aliceProposalPDA = generateProposalPDA(alice.publicKey, program.programId, 0);
+    const bobVotePDA = generateVotePDA(bob.publicKey, alice.publicKey, program.programId, 0);
+
+    const proposalBefore = await program.account.proposal.fetch(aliceProposalPDA);
+    const initialVoteCount = proposalBefore.voteCount.toNumber();
+
+    await program.methods
+      .voteOnProposal(new BN(0), alice.publicKey)
+      .accounts({
+        voteAccount: bobVotePDA,
+        user: bob.publicKey,
+        proposal: aliceProposalPDA,
+      })
+      .signers([bob])
+      .rpc();
+
+    const proposalAfter = await program.account.proposal.fetch(aliceProposalPDA);
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
+    console.log(`✅ Multiple users voted on Alice's proposal, total votes: ${proposalAfter.voteCount.toNumber()}`);
+  });
+
+  it("Vote timestamp is correctly recorded", async () => {
+    // Create a new proposal for this test
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Timestamp Test", "Testing vote timestamps", new anchor.BN(100000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    const votePDA = generateVotePDA(user, user, program.programId, count);
+    const beforeTime = Math.floor(Date.now() / 1000);
+
+    await program.methods
+      .voteOnProposal(new BN(count), user)
+      .accounts({
+        voteAccount: votePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    const afterTime = Math.floor(Date.now() / 1000);
+    const voteAccount = await program.account.voteAccount.fetch(votePDA);
+
+    expect(voteAccount.timestamp.toNumber()).to.be.greaterThanOrEqual(beforeTime);
+    expect(voteAccount.timestamp.toNumber()).to.be.lessThanOrEqual(afterTime + 5); // Allow 5 second buffer
+    console.log("✅ Vote timestamp correctly recorded");
+  });
+
   // ==================== SUMMARY ====================
 
   it("Test summary", async () => {
@@ -753,6 +951,8 @@ describe("community-fund", () => {
     console.log("✅ Proposal rejection: all 3 admins tested");
     console.log("✅ Funding approval: single admin & 2-of-3 multisig");
     console.log("✅ Admin transfer: position transfer, security checks");
+    console.log("✅ Voting: single vote, multiple users, duplicate prevention");
+    console.log("✅ Vote tracking: count increment, timestamp recording");
     console.log("✅ Security: non-admin/non-owner prevention");
     console.log("✅ Multiple users: independent operations");
     console.log("=".repeat(60) + "\n");
