@@ -61,4 +61,12 @@ pub mod community_fund {
     ) -> Result<()> {
         instructions::proposal::approve_funding(ctx, proposal_id, owner)
     }
+
+    pub fn vote_on_proposal(
+        ctx: Context<VoteOnProposal>,
+        proposal_id: u64,
+        owner: Pubkey,
+    ) -> Result<()> {
+        instructions::proposal::vote_on_proposal(ctx, proposal_id, owner)
+    }
 }

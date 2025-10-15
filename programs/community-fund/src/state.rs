@@ -23,7 +23,7 @@ pub struct Proposal {
     pub bump: u8,
 
     #[max_len(3)]
-    pub funding_approvals: Vec<Pubkey>
+    pub funding_approvals: Vec<Pubkey>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, InitSpace)]
@@ -40,3 +40,9 @@ pub struct UserProfile {
     pub bump: u8,
 }
 
+#[account]
+#[derive(InitSpace)]
+pub struct VoteAccount {
+    pub timestamp: i64,
+    pub bump: u8,
+}
