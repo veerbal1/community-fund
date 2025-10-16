@@ -66,7 +66,8 @@ pub mod community_fund {
         ctx: Context<VoteOnProposal>,
         proposal_id: u64,
         owner: Pubkey,
+        token_weight: u64
     ) -> Result<()> {
-        instructions::proposal::vote_on_proposal(ctx, proposal_id, owner)
+        instructions::proposal::vote_on_proposal(ctx, proposal_id, owner, token_weight)
     }
 }

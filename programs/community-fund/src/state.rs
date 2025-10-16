@@ -44,5 +44,6 @@ pub struct UserProfile {
 #[derive(InitSpace)]
 pub struct VoteAccount {
     pub timestamp: i64,
+    pub token_weight: u64,
     pub bump: u8,
 }

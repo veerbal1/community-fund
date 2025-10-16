@@ -13,4 +13,7 @@ pub enum ErrorCode {
 
     #[msg("This admin has already approved this proposal")]
     AlreadyApproved,
+
+    #[msg("Voting Expired")]
+    VotingExpired
 }
