@@ -711,8 +711,9 @@ describe("community-fund", () => {
   });
 
   // ==================== VOTE TESTS ====================
+  // ==================== VOTING WEIGHT FEATURE TESTS ====================
 
-  it("User can vote on a proposal", async () => {
+  it("User can vote with token weight of 1", async () => {
     // Use proposal 4 (exists and not rejected/approved yet)
     const proposalPDA = generateProposalPDA(user, program.programId, 4);
     const votePDA = generateVotePDA(user, user, program.programId, 4);
@@ -721,8 +722,9 @@ describe("community-fund", () => {
     const proposalBefore = await program.account.proposal.fetch(proposalPDA);
     const initialVoteCount = proposalBefore.voteCount.toNumber();
 
+    const tokenWeight = 1;
     await program.methods
-      .voteOnProposal(new BN(4), user)
+      .voteOnProposal(new BN(4), user, new BN(tokenWeight))
       .accounts({
         voteAccount: votePDA,
         user: user,
@@ -730,14 +732,86 @@ describe("community-fund", () => {
       })
       .rpc();
 
-    // Verify vote account was created
+    // Verify vote account was created with correct weight
     const voteAccount = await program.account.voteAccount.fetch(votePDA);
     expect(voteAccount.timestamp.toNumber()).to.be.greaterThan(0);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
 
-    // Verify vote count increased
+    // Verify vote count increased by token weight
     const proposalAfter = await program.account.proposal.fetch(proposalPDA);
-    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
-    console.log(`✅ Vote recorded, count: ${initialVoteCount} -> ${proposalAfter.voteCount.toNumber()}`);
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + tokenWeight);
+    console.log(`✅ Vote recorded with weight ${tokenWeight}, count: ${initialVoteCount} -> ${proposalAfter.voteCount.toNumber()}`);
+  });
+
+  it("User can vote with higher token weight (100 tokens)", async () => {
+    // Create a new proposal for this test
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("High Weight Vote Test", "Testing higher vote weights", new anchor.BN(500000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    const votePDA = generateVotePDA(user, user, program.programId, count);
+    const tokenWeight = 100;
+
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(tokenWeight))
+      .accounts({
+        voteAccount: votePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    const voteAccount = await program.account.voteAccount.fetch(votePDA);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(tokenWeight);
+    console.log(`✅ Vote recorded with weight ${tokenWeight}, total count: ${proposal.voteCount.toNumber()}`);
+  });
+
+  it("User can vote with large token weight (1000 tokens)", async () => {
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Large Weight Test", "Testing large vote weights", new anchor.BN(500000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    const votePDA = generateVotePDA(user, user, program.programId, count);
+    const tokenWeight = 1000;
+
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(tokenWeight))
+      .accounts({
+        voteAccount: votePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    const voteAccount = await program.account.voteAccount.fetch(votePDA);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(tokenWeight);
+    console.log(`✅ Vote recorded with weight ${tokenWeight}, total count: ${proposal.voteCount.toNumber()}`);
   });
 
   it("Cannot vote twice on same proposal", async () => {
@@ -746,7 +820,7 @@ describe("community-fund", () => {
 
     try {
       await program.methods
-        .voteOnProposal(new BN(4), user)
+        .voteOnProposal(new BN(4), user, new BN(1))
         .accounts({
           voteAccount: votePDA,
           user: user,
@@ -760,22 +834,53 @@ describe("community-fund", () => {
     }
   });
 
-  it("Multiple users can vote on same proposal", async () => {
-    // Airdrop to Bob
-    const airdropSig = await provider.connection.requestAirdrop(
-      bob.publicKey,
-      2 * anchor.web3.LAMPORTS_PER_SOL
-    );
-    await provider.connection.confirmTransaction(airdropSig, "confirmed");
+  it("Multiple users can vote with different token weights", async () => {
+    // Airdrop to Bob if not already done
+    try {
+      const airdropSig = await provider.connection.requestAirdrop(
+        bob.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdropSig, "confirmed");
+    } catch (e) {
+      // Bob might already have funds
+    }
 
-    const proposalPDA = generateProposalPDA(user, program.programId, 4);
-    const bobVotePDA = generateVotePDA(bob.publicKey, user, program.programId, 4);
+    // Create a new proposal for this test
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
 
-    const proposalBefore = await program.account.proposal.fetch(proposalPDA);
-    const initialVoteCount = proposalBefore.voteCount.toNumber();
-
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
     await program.methods
-      .voteOnProposal(new BN(4), user)
+      .createProposal("Multiple Voters Test", "Testing multiple users with different weights", new anchor.BN(500000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    // User votes with weight 50
+    const userVotePDA = generateVotePDA(user, user, program.programId, count);
+    const userWeight = 50;
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(userWeight))
+      .accounts({
+        voteAccount: userVotePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    let proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(userWeight);
+
+    // Bob votes with weight 75
+    const bobVotePDA = generateVotePDA(bob.publicKey, user, program.programId, count);
+    const bobWeight = 75;
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(bobWeight))
       .accounts({
         voteAccount: bobVotePDA,
         user: bob.publicKey,
@@ -785,11 +890,11 @@ describe("community-fund", () => {
       .rpc();
 
     const bobVoteAccount = await program.account.voteAccount.fetch(bobVotePDA);
-    expect(bobVoteAccount.timestamp.toNumber()).to.be.greaterThan(0);
+    expect(bobVoteAccount.tokenWeight.toNumber()).to.equal(bobWeight);
 
-    const proposalAfter = await program.account.proposal.fetch(proposalPDA);
-    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
-    console.log(`✅ Multiple users can vote, count: ${initialVoteCount} -> ${proposalAfter.voteCount.toNumber()}`);
+    proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(userWeight + bobWeight);
+    console.log(`✅ Multiple users voted with different weights: User(${userWeight}) + Bob(${bobWeight}) = ${proposal.voteCount.toNumber()}`);
   });
 
   // ==================== MULTIPLE USERS TESTS ====================
@@ -836,7 +941,7 @@ describe("community-fund", () => {
     console.log("✅ Multiple users can create proposals independently");
   });
 
-  it("Alice can vote on her own proposal", async () => {
+  it("Alice can vote on her own proposal with token weight", async () => {
     // Alice's proposal 0 exists from earlier test
     const aliceProposalPDA = generateProposalPDA(alice.publicKey, program.programId, 0);
     const aliceVotePDA = generateVotePDA(alice.publicKey, alice.publicKey, program.programId, 0);
@@ -844,8 +949,9 @@ describe("community-fund", () => {
     const proposalBefore = await program.account.proposal.fetch(aliceProposalPDA);
     const initialVoteCount = proposalBefore.voteCount.toNumber();
 
+    const tokenWeight = 25;
     await program.methods
-      .voteOnProposal(new BN(0), alice.publicKey)
+      .voteOnProposal(new BN(0), alice.publicKey, new BN(tokenWeight))
       .accounts({
         voteAccount: aliceVotePDA,
         user: alice.publicKey,
@@ -854,20 +960,24 @@ describe("community-fund", () => {
       .signers([alice])
       .rpc();
 
+    const voteAccount = await program.account.voteAccount.fetch(aliceVotePDA);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+
     const proposalAfter = await program.account.proposal.fetch(aliceProposalPDA);
-    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
-    console.log("✅ Owner can vote on their own proposal");
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + tokenWeight);
+    console.log(`✅ Owner can vote on their own proposal with weight ${tokenWeight}`);
   });
 
-  it("Users can vote on Alice's proposal", async () => {
+  it("Users can vote on Alice's proposal with different weights", async () => {
     const aliceProposalPDA = generateProposalPDA(alice.publicKey, program.programId, 0);
     const userVotePDA = generateVotePDA(user, alice.publicKey, program.programId, 0);
 
     const proposalBefore = await program.account.proposal.fetch(aliceProposalPDA);
     const initialVoteCount = proposalBefore.voteCount.toNumber();
 
+    const tokenWeight = 150;
     await program.methods
-      .voteOnProposal(new BN(0), alice.publicKey)
+      .voteOnProposal(new BN(0), alice.publicKey, new BN(tokenWeight))
       .accounts({
         voteAccount: userVotePDA,
         user: user,
@@ -875,20 +985,24 @@ describe("community-fund", () => {
       })
       .rpc();
 
+    const voteAccount = await program.account.voteAccount.fetch(userVotePDA);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+
     const proposalAfter = await program.account.proposal.fetch(aliceProposalPDA);
-    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
-    console.log("✅ Users can vote on other users' proposals");
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + tokenWeight);
+    console.log(`✅ Users can vote on other users' proposals with weight ${tokenWeight}`);
   });
 
-  it("Bob can also vote on Alice's proposal", async () => {
+  it("Bob can also vote on Alice's proposal, testing vote accumulation", async () => {
     const aliceProposalPDA = generateProposalPDA(alice.publicKey, program.programId, 0);
     const bobVotePDA = generateVotePDA(bob.publicKey, alice.publicKey, program.programId, 0);
 
     const proposalBefore = await program.account.proposal.fetch(aliceProposalPDA);
     const initialVoteCount = proposalBefore.voteCount.toNumber();
 
+    const tokenWeight = 200;
     await program.methods
-      .voteOnProposal(new BN(0), alice.publicKey)
+      .voteOnProposal(new BN(0), alice.publicKey, new BN(tokenWeight))
       .accounts({
         voteAccount: bobVotePDA,
         user: bob.publicKey,
@@ -897,12 +1011,15 @@ describe("community-fund", () => {
       .signers([bob])
       .rpc();
 
+    const voteAccount = await program.account.voteAccount.fetch(bobVotePDA);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+
     const proposalAfter = await program.account.proposal.fetch(aliceProposalPDA);
-    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + 1);
+    expect(proposalAfter.voteCount.toNumber()).to.equal(initialVoteCount + tokenWeight);
     console.log(`✅ Multiple users voted on Alice's proposal, total votes: ${proposalAfter.voteCount.toNumber()}`);
   });
 
-  it("Vote timestamp is correctly recorded", async () => {
+  it("Vote timestamp and weight are correctly recorded", async () => {
     // Create a new proposal for this test
     const count = await program.account.userProfile
       .fetch(userProfilePDA)
@@ -919,9 +1036,10 @@ describe("community-fund", () => {
       .rpc();
 
     const votePDA = generateVotePDA(user, user, program.programId, count);
+    const tokenWeight = 42;
 
     await program.methods
-      .voteOnProposal(new BN(count), user)
+      .voteOnProposal(new BN(count), user, new BN(tokenWeight))
       .accounts({
         voteAccount: votePDA,
         user: user,
@@ -934,7 +1052,297 @@ describe("community-fund", () => {
     // Verify timestamp exists and is a reasonable Unix timestamp (after 2020)
     expect(voteAccount.timestamp.toNumber()).to.be.greaterThan(1577836800); // Jan 1, 2020
     expect(voteAccount.timestamp.toNumber()).to.be.lessThan(2147483647); // Max 32-bit timestamp
-    console.log(`✅ Vote timestamp correctly recorded: ${voteAccount.timestamp.toNumber()}`);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+    console.log(`✅ Vote timestamp: ${voteAccount.timestamp.toNumber()}, weight: ${voteAccount.tokenWeight.toNumber()}`);
+  });
+
+  // ==================== VOTING WEIGHT EDGE CASES ====================
+
+  it("User can vote with zero token weight", async () => {
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Zero Weight Test", "Testing zero vote weight", new anchor.BN(100000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    const votePDA = generateVotePDA(user, user, program.programId, count);
+    const tokenWeight = 0;
+
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(tokenWeight))
+      .accounts({
+        voteAccount: votePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    const voteAccount = await program.account.voteAccount.fetch(votePDA);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(0);
+    console.log(`✅ Zero weight vote recorded, count remains: ${proposal.voteCount.toNumber()}`);
+  });
+
+  it("User can vote with very large token weight", async () => {
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Large Weight Test", "Testing very large weight", new anchor.BN(100000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    const votePDA = generateVotePDA(user, user, program.programId, count);
+    // 1 million tokens
+    const tokenWeight = 1000000;
+
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(tokenWeight))
+      .accounts({
+        voteAccount: votePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    const voteAccount = await program.account.voteAccount.fetch(votePDA);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(tokenWeight);
+    console.log(`✅ Very large weight vote recorded: ${proposal.voteCount.toNumber()}`);
+  });
+
+  it("Accumulated votes from multiple users with various weights", async () => {
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Accumulation Test", "Testing vote accumulation", new anchor.BN(100000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    // User votes with weight 100
+    const userVotePDA = generateVotePDA(user, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(100))
+      .accounts({
+        voteAccount: userVotePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    // Bob votes with weight 250
+    const bobVotePDA = generateVotePDA(bob.publicKey, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(250))
+      .accounts({
+        voteAccount: bobVotePDA,
+        user: bob.publicKey,
+        proposal: proposalPDA,
+      })
+      .signers([bob])
+      .rpc();
+
+    // Alice votes with weight 500
+    const aliceVotePDA = generateVotePDA(alice.publicKey, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(500))
+      .accounts({
+        voteAccount: aliceVotePDA,
+        user: alice.publicKey,
+        proposal: proposalPDA,
+      })
+      .signers([alice])
+      .rpc();
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(850); // 100 + 250 + 500
+    console.log(`✅ Accumulated votes: 100 + 250 + 500 = ${proposal.voteCount.toNumber()}`);
+  });
+
+  // ==================== VOTING TIME WINDOW TESTS ====================
+
+  it("Verify vote account stores all required data", async () => {
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Data Structure Test", "Verify vote data", new anchor.BN(100000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    const votePDA = generateVotePDA(user, user, program.programId, count);
+    const tokenWeight = 333;
+
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(tokenWeight))
+      .accounts({
+        voteAccount: votePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    const voteAccount = await program.account.voteAccount.fetch(votePDA);
+    
+    // Verify all fields are properly stored
+    expect(voteAccount.timestamp).to.exist;
+    expect(voteAccount.tokenWeight).to.exist;
+    expect(voteAccount.bump).to.exist;
+    expect(voteAccount.timestamp.toNumber()).to.be.greaterThan(0);
+    expect(voteAccount.tokenWeight.toNumber()).to.equal(tokenWeight);
+    expect(voteAccount.bump).to.be.greaterThan(0);
+    
+    console.log(`✅ Vote account complete: timestamp=${voteAccount.timestamp}, weight=${voteAccount.tokenWeight}, bump=${voteAccount.bump}`);
+  });
+
+  it("Different users can have different weights on the same proposal", async () => {
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Weight Variety Test", "Different weights from different users", new anchor.BN(100000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    // User votes with weight 10
+    const userVotePDA = generateVotePDA(user, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(10))
+      .accounts({
+        voteAccount: userVotePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    // Bob votes with weight 20
+    const bobVotePDA = generateVotePDA(bob.publicKey, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(20))
+      .accounts({
+        voteAccount: bobVotePDA,
+        user: bob.publicKey,
+        proposal: proposalPDA,
+      })
+      .signers([bob])
+      .rpc();
+
+    // Alice votes with weight 30
+    const aliceVotePDA = generateVotePDA(alice.publicKey, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(30))
+      .accounts({
+        voteAccount: aliceVotePDA,
+        user: alice.publicKey,
+        proposal: proposalPDA,
+      })
+      .signers([alice])
+      .rpc();
+
+    // Verify each vote has the correct weight stored
+    const userVote = await program.account.voteAccount.fetch(userVotePDA);
+    const bobVote = await program.account.voteAccount.fetch(bobVotePDA);
+    const aliceVote = await program.account.voteAccount.fetch(aliceVotePDA);
+
+    expect(userVote.tokenWeight.toNumber()).to.equal(10);
+    expect(bobVote.tokenWeight.toNumber()).to.equal(20);
+    expect(aliceVote.tokenWeight.toNumber()).to.equal(30);
+
+    const proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(60); // 10 + 20 + 30
+    
+    console.log(`✅ Individual weights verified: User(10), Bob(20), Alice(30) = Total(${proposal.voteCount.toNumber()})`);
+  });
+
+  it("Proposal vote count starts at zero and accumulates correctly", async () => {
+    const count = await program.account.userProfile
+      .fetch(userProfilePDA)
+      .then((userProfile) => userProfile.proposalCount.toNumber());
+
+    const proposalPDA = generateProposalPDA(user, program.programId, count);
+    await program.methods
+      .createProposal("Count Tracking Test", "Verify count starts at zero", new anchor.BN(100000000))
+      .accounts({
+        proposal: proposalPDA,
+        userProfile: userProfilePDA,
+        user: user,
+      })
+      .rpc();
+
+    // Verify initial count is 0
+    let proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(0);
+    console.log(`   Initial vote count: ${proposal.voteCount.toNumber()}`);
+
+    // Add first vote with weight 17
+    const userVotePDA = generateVotePDA(user, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(17))
+      .accounts({
+        voteAccount: userVotePDA,
+        user: user,
+        proposal: proposalPDA,
+      })
+      .rpc();
+
+    proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(17);
+    console.log(`   After first vote (17): ${proposal.voteCount.toNumber()}`);
+
+    // Add second vote with weight 23
+    const bobVotePDA = generateVotePDA(bob.publicKey, user, program.programId, count);
+    await program.methods
+      .voteOnProposal(new BN(count), user, new BN(23))
+      .accounts({
+        voteAccount: bobVotePDA,
+        user: bob.publicKey,
+        proposal: proposalPDA,
+      })
+      .signers([bob])
+      .rpc();
+
+    proposal = await program.account.proposal.fetch(proposalPDA);
+    expect(proposal.voteCount.toNumber()).to.equal(40); // 17 + 23
+    console.log(`   After second vote (23): ${proposal.voteCount.toNumber()}`);
+
+    console.log(`✅ Vote count accumulation verified: 0 → 17 → 40`);
   });
 
   // ==================== SUMMARY ====================
@@ -952,6 +1360,9 @@ describe("community-fund", () => {
     console.log("✅ Admin transfer: position transfer, security checks");
     console.log("✅ Voting: single vote, multiple users, duplicate prevention");
     console.log("✅ Vote tracking: count increment, timestamp recording");
+    console.log("✅ Voting weights: various weights (0, 1, 100, 1000, 1M)");
+    console.log("✅ Weight accumulation: multiple users with different weights");
+    console.log("✅ Vote data structure: timestamp, weight, bump storage");
     console.log("✅ Security: non-admin/non-owner prevention");
     console.log("✅ Multiple users: independent operations");
     console.log("=".repeat(60) + "\n");
