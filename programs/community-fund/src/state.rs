@@ -47,3 +47,9 @@ pub struct VoteAccount {
     pub token_weight: u64,
     pub bump: u8,
 }
+
+#[account]
+pub struct Vault {
+    pub total_balance: u64,
+    pub bump: u8,
+}
