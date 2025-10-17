@@ -63,6 +63,10 @@ echo ""
 echo "// ===== instructions/proposal/approve_funding.rs ====="
 cat instructions/proposal/approve_funding.rs
 
+echo ""
+echo "// ===== instructions/proposal/vote.rs ====="
+cat instructions/proposal/vote.rs
+
 } > "../../../$OUTPUT_FILE"
 
 cd ../../..
