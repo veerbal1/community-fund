@@ -24,13 +24,17 @@ pub struct Proposal {
 
     #[max_len(3)]
     pub funding_approvals: Vec<Pubkey>,
+
+    pub finalized_at: i64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, InitSpace)]
 pub enum ProposalStatus {
     Pending,
+    Finalized,
     Approved,
     Rejected,
+    Claimed,
 }
 
 #[account]
@@ -49,7 +53,9 @@ pub struct VoteAccount {
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct Vault {
-    pub total_balance: u64,
+    pub total_deposited: u64,
+    pub total_claimed: u64,
     pub bump: u8,
 }

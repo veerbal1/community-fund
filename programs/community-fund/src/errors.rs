@@ -15,5 +15,20 @@ pub enum ErrorCode {
     AlreadyApproved,
 
     #[msg("Voting Expired")]
-    VotingExpired
+    VotingExpired,
+
+    #[msg("Voting period is still active")]
+    VotingStillActive,
+
+    #[msg("Proposal has not received enough votes")]
+    InsufficientVotes,
+
+    #[msg("Proposal already finalized")]
+    AlreadyFinalized,
+
+    #[msg("Proposal not approved for claiming")]
+    NotApproved,
+
+    #[msg("Insufficient vault balance")]
+    InsufficientVaultBalance,
 }

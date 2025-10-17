@@ -70,4 +70,24 @@ pub mod community_fund {
     ) -> Result<()> {
         instructions::proposal::vote_on_proposal(ctx, proposal_id, owner, token_weight)
     }
+
+    pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+        instructions::vault::initialize_vault(ctx)
+    }
+
+    pub fn deposit_to_vault(ctx: Context<DepositToVault>, amount: u64) -> Result<()> {
+        instructions::vault::deposit_to_vault(ctx, amount)
+    }
+
+    pub fn finalize_proposal(
+        ctx: Context<FinalizeProposal>,
+        proposal_id: u64,
+        owner: Pubkey,
+    ) -> Result<()> {
+        instructions::vault::finalize_proposal(ctx, proposal_id, owner)
+    }
+
+    pub fn claim_funds(ctx: Context<ClaimFunds>, proposal_id: u64) -> Result<()> {
+        instructions::vault::claim_funds(ctx, proposal_id)
+    }
 }

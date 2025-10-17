@@ -41,6 +41,7 @@ pub fn create_proposal(
     proposal.vote_count = 0;
     proposal.bump = ctx.bumps.proposal;
     proposal.created_at = Clock::get()?.unix_timestamp;
+    proposal.finalized_at = 0;
 
     proposal.funding_approvals = Vec::new();
 
